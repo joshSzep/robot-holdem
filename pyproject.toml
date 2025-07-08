@@ -1,0 +1,21 @@
+[project]
+name = "robot-hold-em"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Joshua Szepietowski", email = "joshSzep@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "dotenv>=0.9.9",
+    "pydantic-ai-slim[openai]>=0.3.6",
+    "rich>=14.0.0",
+]
+
+[project.scripts]
+robot-hold-em = "robot_hold_em:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

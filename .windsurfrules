@@ -1,0 +1,9 @@
+- Always use absolute imports
+- Use `uv` for dependency management, not `pip`, common commands include:
+    - `uv add <package>` - adds a dependency
+    - `uv remove <package>` - removes a dependency
+    - `uv update <package>` - updates a dependency to the latest version
+    - `uv update` - updates all dependencies to latest versions
+    - `uv sync` - syncs dependencies to `uv.lock` and installs missing dependencies
+    - `uv lock` - locks dependencies to specific versions
+    - `uv run python <script>` - runs a python script in the virtual environment
