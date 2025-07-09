@@ -29,6 +29,8 @@ from robot_hold_em.core import (
 )
 from robot_hold_em.players import Player
 from robot_hold_em.players.llm_personalities import LLMPersonalities
+from robot_hold_em.commentators import CommentatorManager, GameEvent
+from robot_hold_em.commentators.personalities import CommentatorPersonalities
 
 # Initialize Rich console
 console = Console()
@@ -79,6 +81,8 @@ class PokerGame:
         small_blind: int = 5,
         big_blind: int = 10,
         broadcast_mode: bool = False,
+        enable_commentary: bool = True,
+        commentary_frequency: float = 0.7,
     ) -> None:
         """Initialize the poker game.
 
@@ -87,6 +91,8 @@ class PokerGame:
             small_blind: Amount of the small blind
             big_blind: Amount of the big blind
             broadcast_mode: If True, shows all players' hole cards and detailed commentary
+            enable_commentary: If True, enables commentator commentary during the game
+            commentary_frequency: Probability (0-1) of generating commentary for an event
         """
         self.starting_stack = starting_stack
         self.small_blind = small_blind
@@ -94,6 +100,8 @@ class PokerGame:
         self.players: Dict[str, Player] = {}
         self.game_state: Optional[GameState] = None
         self.broadcast_mode = broadcast_mode
+        self.enable_commentary = enable_commentary
+        self.commentator_manager = CommentatorManager(console, commentary_frequency) if enable_commentary else None
 
     def add_player(self, player: Player) -> None:
         """Add a player to the game.
@@ -102,6 +110,31 @@ class PokerGame:
             player: The player to add
         """
         self.players[player.player_id] = player
+        
+    def _get_player_names_mapping(self) -> Dict[str, str]:
+        """Create a mapping of player IDs to their display names.
+        
+        Returns:
+            Dictionary mapping player IDs to display names
+        """
+        return {player_id: player.name for player_id, player in self.players.items()}
+        
+    def add_commentator(self, commentator_id: str, name: str, personality_type: str = "professional", model: str = "gpt-4o-mini") -> None:
+        """Add a commentator to the game.
+        
+        Args:
+            commentator_id: Unique identifier for the commentator
+            name: Display name for the commentator
+            personality_type: Type of personality to use
+            model: The OpenAI model to use for commentary generation
+        """
+        if not self.enable_commentary or not self.commentator_manager:
+            return
+            
+        commentator = CommentatorPersonalities.create_commentator(
+            commentator_id, name, personality_type, model
+        )
+        self.commentator_manager.add_commentator(commentator)
 
     def setup_game(self) -> None:
         """Set up the game state with the current players."""
@@ -109,6 +142,15 @@ class PokerGame:
         self.game_state = GameState(
             player_ids, self.starting_stack, self.small_blind, self.big_blind
         )
+        
+        # Emit game start event
+        if self.enable_commentary and self.commentator_manager and self.game_state:
+            event = GameEvent(
+                event_type=GameEvent.EventType.GAME_START,
+                game_state=self.game_state,
+                player_names=self._get_player_names_mapping()
+            )
+            self.commentator_manager.handle_event(event)
 
     def play_hand(self) -> None:
         """Play a single hand of poker."""
@@ -126,6 +168,15 @@ class PokerGame:
 
         dealer_id = list(self.players.keys())[self.game_state.dealer_position]
         print(f"Dealer: {self.players[dealer_id].name}")
+        
+        # Emit hand start event
+        if self.enable_commentary and self.commentator_manager:
+            event = GameEvent(
+                event_type=GameEvent.EventType.HAND_START,
+                game_state=self.game_state,
+                player_names=self._get_player_names_mapping()
+            )
+            self.commentator_manager.handle_event(event)
 
         # Post blinds
         small_blind_pos = (self.game_state.dealer_position + 1) % len(self.players)
@@ -137,11 +188,24 @@ class PokerGame:
         self._place_bet(big_blind_id, self.game_state.big_blind)
 
         print(
-            f"{self.players[small_blind_id].name} posts small blind {format_chips(self.game_state.small_blind)}"
+            f"Small blind: {self.players[small_blind_id].name} ({format_chips(self.game_state.small_blind)})"
         )
         print(
-            f"{self.players[big_blind_id].name} posts big blind {format_chips(self.game_state.big_blind)}"
+            f"Big blind: {self.players[big_blind_id].name} ({format_chips(self.game_state.big_blind)})"
         )
+        
+        # Emit blinds posted event
+        if self.enable_commentary and self.commentator_manager:
+            event = GameEvent(
+                event_type=GameEvent.EventType.BLINDS_POSTED,
+                game_state=self.game_state,
+                additional_info={
+                    "small_blind_id": small_blind_id,
+                    "big_blind_id": big_blind_id
+                },
+                player_names=self._get_player_names_mapping()
+            )
+            self.commentator_manager.handle_event(event)
 
         # Notify players of their hole cards
         print_section("HOLE CARDS")
@@ -149,17 +213,29 @@ class PokerGame:
         # Create a table for hole cards
         table = Table(box=box.SIMPLE)
         table.add_column("Player", style="bold")
-        table.add_column("Hole Cards", style="bold red")
-        table.add_column("Stack", style="bold green")
+        # Deal hole cards to each player
+        self.game_state._deal_hole_cards()
 
+        # Notify each player of their hole cards
         for player_id, player in self.players.items():
-            player_state = self.game_state.players[player_id]
-            player.notify_hole_cards(player_state.hole_cards)
+            player.notify_hole_cards(self.game_state.players[player_id].hole_cards)
+            
+        # Emit hole cards dealt event
+        if self.enable_commentary and self.commentator_manager:
+            event = GameEvent(
+                event_type=GameEvent.EventType.HOLE_CARDS_DEALT,
+                game_state=self.game_state,
+                player_names=self._get_player_names_mapping()
+            )
+            self.commentator_manager.handle_event(event)
 
-            # Show all robot players' cards in broadcast mode
-            cards_str = f"{player_state.hole_cards[0]} {player_state.hole_cards[1]}"
-            stack_str = format_chips(player_state.stack)
-            table.add_row(player.name, cards_str, stack_str)
+        # Show all robot players' cards in broadcast mode
+        if self.broadcast_mode:
+            for player_id, player in self.players.items():
+                player_state = self.game_state.players[player_id]
+                cards_str = f"{player_state.hole_cards[0]} {player_state.hole_cards[1]}"
+                stack_str = format_chips(player_state.stack)
+                table.add_row(player.name, cards_str, stack_str)
 
         # Print the table in broadcast mode
         if self.broadcast_mode:
@@ -170,39 +246,64 @@ class PokerGame:
 
         # If more than one player is still in the hand, continue to the flop
         if self._count_active_players() > 1:
-            flop = self.game_state.deal_flop()
-            print_section("Flop")
-            console.print(
-                f"Flop cards: [bold red]{flop[0]} {flop[1]} {flop[2]}[/bold red]"
-            )
+            flop_cards = self.game_state.deal_flop()
+            print_section("FLOP")
+            console.print(" ".join(str(card) for card in flop_cards))
 
-            # Notify players of community cards
-            for player in self.players.values():
+            # Notify each player of the community cards
+            for player_id, player in self.players.items():
                 player.notify_community_cards(self.game_state.community_cards)
+                
+            # Emit flop dealt event
+            if self.enable_commentary and self.commentator_manager:
+                event = GameEvent(
+                    event_type=GameEvent.EventType.FLOP_DEALT,
+                    game_state=self.game_state,
+                    player_names=self._get_player_names_mapping()
+                )
+                self.commentator_manager.handle_event(event)
 
             self._play_betting_round("Flop")
 
         # If more than one player is still in the hand, continue to the turn
         if self._count_active_players() > 1:
-            turn = self.game_state.deal_turn()
-            print_section("Turn")
-            console.print(f"Turn card: [bold red]{turn}[/bold red]")
+            turn_card = self.game_state.deal_turn()
+            print_section("TURN")
+            console.print(str(turn_card))
 
-            # Notify players of community cards
-            for player in self.players.values():
+            # Notify each player of the updated community cards
+            for player_id, player in self.players.items():
                 player.notify_community_cards(self.game_state.community_cards)
+                
+            # Emit turn dealt event
+            if self.enable_commentary and self.commentator_manager:
+                event = GameEvent(
+                    event_type=GameEvent.EventType.TURN_DEALT,
+                    game_state=self.game_state,
+                    player_names=self._get_player_names_mapping()
+                )
+                self.commentator_manager.handle_event(event)
 
             self._play_betting_round("Turn")
 
         # If more than one player is still in the hand, continue to the river
         if self._count_active_players() > 1:
-            river = self.game_state.deal_river()
-            print_section("River")
-            console.print(f"River card: [bold red]{river}[/bold red]")
+            river_card = self.game_state.deal_river()
+            print_section("RIVER")
+            console.print(str(river_card))
 
-            # Notify players of community cards
-            for player in self.players.values():
+            # Notify each player of the updated community cards
+            for player_id, player in self.players.items():
                 player.notify_community_cards(self.game_state.community_cards)
+                
+            # Emit river dealt event
+            if self.enable_commentary and self.commentator_manager:
+                event = GameEvent(
+                    event_type=GameEvent.EventType.RIVER_DEALT,
+                    game_state=self.game_state,
+                    player_names=self._get_player_names_mapping()
+                )
+                self.commentator_manager.handle_event(event)
 
             self._play_betting_round("River")
 
@@ -215,6 +316,15 @@ class PokerGame:
 
         # Showdown if more than one player is still in the hand
         if self._count_active_players() > 1:
+            # Emit showdown event
+            if self.enable_commentary and self.commentator_manager:
+                event = GameEvent(
+                    event_type=GameEvent.EventType.SHOWDOWN,
+                    game_state=self.game_state,
+                    player_names=self._get_player_names_mapping()
+                )
+                self.commentator_manager.handle_event(event)
+            
             self._showdown()
         else:
             # Only one player left, they win by default
@@ -299,6 +409,7 @@ class PokerGame:
 
             # Get player's action
             action, bet_amount = player.get_action(self.game_state)
+            player_state.last_action = action
 
             # Process the action with ESPN-style commentary
             player_name = f"[bold]{player.name}[/bold]"
@@ -381,6 +492,18 @@ class PokerGame:
                 else:
                     # Start another round of betting from the beginning
                     current_player_index = 0
+
+            # Emit player action event
+            if self.enable_commentary and self.commentator_manager:
+                event = GameEvent(
+                    event_type=GameEvent.EventType.PLAYER_ACTION,
+                    game_state=self.game_state,
+                    player_id=player_id,
+                    action=action,
+                    bet_amount=bet_amount if action in [PlayerAction.BET, PlayerAction.RAISE] else None,
+                    player_names=self._get_player_names_mapping()
+                )
+                self.commentator_manager.handle_event(event)
 
     def _place_bet(self, player_id: str, amount: int) -> None:
         """Place a bet for a player.
@@ -468,6 +591,17 @@ class PokerGame:
                 console.print(
                     f"{winner_name}'s updated stack: [bold green]{format_chips(self.game_state.players[winner_id].stack)}[/bold green]"
                 )
+                
+            # Emit winner determined event
+            if self.enable_commentary and self.commentator_manager:
+                event = GameEvent(
+                    event_type=GameEvent.EventType.WINNER_DETERMINED,
+                    game_state=self.game_state,
+                    winner_id=winner_id,
+                    pot_amount=self.game_state.current_pot,
+                    player_names=self._get_player_names_mapping()
+                )
+                self.commentator_manager.handle_event(event)
         else:
             split_message = f"SPLIT POT: {format_chips(pot_share)} EACH"
             print_winner(split_message)
@@ -521,7 +655,14 @@ def main() -> None:
         small_blind=SMALL_BLIND,
         big_blind=BIG_BLIND,
         broadcast_mode=BROADCAST_MODE,
+        enable_commentary=True,
+        commentary_frequency=0.7,
     )
+    
+    # Add commentators with different personalities
+    game.add_commentator("commentator1", "Mike 'The Analyst' Johnson", "professional", OPENAI_MODEL)
+    game.add_commentator("commentator2", "Excited Eddie", "enthusiastic", OPENAI_MODEL)
+    game.add_commentator("commentator3", "Funny Fred", "comedic", OPENAI_MODEL)
 
     # Add LLM robot players with different personalities
     game.add_player(
@@ -607,3 +748,12 @@ def main() -> None:
         justify="center",
     )
     console.rule(style="bright_blue", characters="=")
+    
+    # Emit game end event
+    if game.enable_commentary and game.commentator_manager and game.game_state:
+        event = GameEvent(
+            event_type=GameEvent.EventType.GAME_END,
+            game_state=game.game_state,
+            player_names=game._get_player_names_mapping()
+        )
+        game.commentator_manager.handle_event(event)
