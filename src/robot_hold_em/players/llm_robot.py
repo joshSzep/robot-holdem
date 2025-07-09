@@ -406,9 +406,16 @@ Your decision:
                 else ", ".join(self._format_card(card) for card in self.community_cards)
             )
 
-            # Get player's current stack
+            # Get player's current stack and bet information
             player_state = game_state.players[self.player_id]
             stack = player_state.stack
+            current_bet = player_state.current_bet
+            
+            # Calculate the amount needed to call
+            current_highest_bet = max(
+                p.current_bet for p in game_state.players.values()
+            )
+            to_raise = current_highest_bet - current_bet
 
             # Display the AI's thought process with the player's name and additional context
             console.print(
@@ -416,7 +423,9 @@ Your decision:
                     f"[bold cyan]{self.name}'s Thought Process:[/bold cyan]\n"
                     + f"[yellow]Hole Cards:[/yellow] {hole_cards_str}\n"
                     + f"[yellow]Community Cards:[/yellow] {community_cards_str}\n"
-                    + f"[yellow]Current Stack:[/yellow] ${stack:,}\n\n"
+                    + f"[yellow]Current Stack:[/yellow] ${stack:,}\n"
+                    + f"[yellow]Current Bet:[/yellow] ${current_bet:,}\n"
+                    + f"[yellow]To Call:[/yellow] ${to_raise:,}\n\n"
                     + f"[italic]Action: {result.output.ACTION}\n\nReasoning: {result.output.REASONING}[/italic]",
                     border_style="cyan",
                     title="AI Poker Thoughts",
