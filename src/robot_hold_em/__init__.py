@@ -230,15 +230,16 @@ class PokerGame:
         """Count the number of players still in the hand.
 
         Returns:
-            Number of active (non-folded) players
+            Number of active (non-folded) players with chips
         """
         if not self.game_state:
             return 0
-        return sum(
-            1
-            for player_state in self.game_state.players.values()
-            if not player_state.folded
-        )
+
+        count = 0
+        for player_state in self.game_state.players.values():
+            if not player_state.folded and player_state.stack > 0:
+                count += 1
+        return count
 
     def _play_betting_round(self, round_name: str) -> None:
         """Play a betting round.
@@ -251,9 +252,18 @@ class PokerGame:
 
         print_section(f"{round_name.upper()} BETTING")
 
-        # Get the proper betting order (starting after the dealer/button)
+        # Get the proper betting order
         player_ids = list(self.players.keys())
-        start_pos = (self.game_state.dealer_position + 1) % len(player_ids)
+
+        # For preflop, betting starts with the player after the big blind (UTG position)
+        # For all other rounds, betting starts with the player after the dealer (small blind position)
+        if round_name.lower() == "preflop":
+            # Start with the player after the big blind
+            start_pos = (self.game_state.dealer_position + 3) % len(player_ids)
+        else:
+            # Start with the player after the dealer/button
+            start_pos = (self.game_state.dealer_position + 1) % len(player_ids)
+
         ordered_player_ids = player_ids[start_pos:] + player_ids[:start_pos]
 
         # Track the highest bet for commentary
@@ -265,6 +275,7 @@ class PokerGame:
             for pid in ordered_player_ids
             if not self.game_state.players[pid].folded
             and not self.game_state.players[pid].all_in
+            and self.game_state.players[pid].stack > 0  # Skip players with zero chips
         ]
 
         # Keep track of who has acted since the last bet/raise
