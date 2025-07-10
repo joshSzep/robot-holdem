@@ -334,6 +334,25 @@ class PokerGame:
                     print(
                         f"\n--- {winner_name} wins ${self.game_state.current_pot} by default (all others folded) ---"
                     )
+                    # Update the winner's stack with the pot amount
+                    player_state.stack += self.game_state.current_pot
+                    
+                    # Show updated stack in broadcast mode
+                    if self.broadcast_mode:
+                        console.print(
+                            f"{winner_name}'s updated stack: [bold green]{format_chips(player_state.stack)}[/bold green]"
+                        )
+                    
+                    # Emit winner determined event
+                    if self.enable_commentary and self.commentator_manager:
+                        event = GameEvent(
+                            event_type=GameEvent.EventType.WINNER_DETERMINED,
+                            game_state=self.game_state,
+                            winner_id=player_id,
+                            pot_amount=self.game_state.current_pot,
+                            player_names=self._get_player_names_mapping()
+                        )
+                        self.commentator_manager.handle_event(event)
                     break
 
     def _count_active_players(self) -> int:

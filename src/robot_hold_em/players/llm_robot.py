@@ -304,8 +304,20 @@ Player name mapping (use these names in your reasoning instead of player IDs):
             return PlayerAction.CHECK, None
 
         # Check for CALL
-        if "CALL" in action_str and PlayerAction.CALL in available_actions:
-            return PlayerAction.CALL, available_actions[PlayerAction.CALL]
+        if "CALL" in action_str:
+            # Even if CALL is not in available_actions, we may need to handle all-in
+            player_state = self.game_state.players[self.player_id]
+            current_highest_bet = max(p.current_bet for p in self.game_state.players.values())
+            call_amount = current_highest_bet - player_state.current_bet
+            
+            # If player can't afford to call, but wants to call, they go all-in
+            if call_amount > player_state.stack:
+                return PlayerAction.CALL, player_state.stack  # All-in
+            elif PlayerAction.CALL in available_actions:
+                return PlayerAction.CALL, available_actions[PlayerAction.CALL]
+            else:
+                # If CALL is not available but the player tried to call, default to FOLD
+                return PlayerAction.FOLD, None
 
         # Check for BET with amount
         bet_match = re.search(r"BET\s+\$?(\d+)", action_str)
@@ -387,7 +399,17 @@ Your decision:
         try:
             # Use the PydanticAI Agent to get a response
             # Combine system and user prompts since system parameter is not supported
-            combined_prompt = f"{system_prompt}\n\n{user_prompt}"
+            
+            # Add a clear warning about stack limitations if the player can't call
+            stack_warning = ""
+            player_state = game_state.players[self.player_id]
+            current_highest_bet = max(p.current_bet for p in game_state.players.values())
+            call_amount = current_highest_bet - player_state.current_bet
+            
+            if call_amount > player_state.stack:
+                stack_warning = f"\n\nIMPORTANT: You only have ${player_state.stack} in your stack, which is not enough to call the current bet of ${call_amount}. Your only options are to FOLD or go ALL-IN with your remaining ${player_state.stack}."
+            
+            combined_prompt = f"{system_prompt}\n\n{user_prompt}{stack_warning}"
             result = self.agent.run_sync(combined_prompt, output_type=PokerAction)
 
             # The result is an AgentRunResult object, and the PokerAction is in the output attribute
