@@ -83,7 +83,7 @@ class PlayerState:
 class GameState:
     """Manages the state of a Texas Hold 'Em poker game."""
     
-    def __init__(self, player_ids: List[str], starting_stack: int, small_blind: int, big_blind: int) -> None:
+    def __init__(self, player_ids: List[str], starting_stack: int, small_blind: int, big_blind: int, jokers: bool = False) -> None:
         """Initialize the game state.
         
         Args:
@@ -91,11 +91,12 @@ class GameState:
             starting_stack: Amount of chips each player starts with
             small_blind: Amount of the small blind
             big_blind: Amount of the big blind
+            jokers: Whether to include jokers in the deck
         """
         self.players = {player_id: PlayerState(player_id, starting_stack) for player_id in player_ids}
         self.small_blind = small_blind
         self.big_blind = big_blind
-        self.deck = Deck()
+        self.deck = Deck(include_jokers=jokers)
         self.community_cards: List[Card] = []
         self.pots: List[Dict] = []  # List of pots (main pot and side pots)
         self.current_pot = 0  # Total amount in the current pot

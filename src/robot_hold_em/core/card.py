@@ -6,11 +6,12 @@ from typing import Self
 
 
 class Suit(Enum):
-    """Represents the four suits in a standard deck of cards."""
+    """Represents the four suits in a standard deck of cards, plus a special suit for jokers."""
     CLUBS = auto()
     DIAMONDS = auto()
     HEARTS = auto()
     SPADES = auto()
+    JOKER = auto()  # Special suit for jokers
     
     def __str__(self) -> str:
         """Return a string representation of the suit."""
@@ -24,12 +25,13 @@ class Suit(Enum):
             Suit.DIAMONDS: "♦",
             Suit.HEARTS: "♥",
             Suit.SPADES: "♠",
+            Suit.JOKER: "★",
         }
         return symbols[self]
 
 
 class Rank(Enum):
-    """Represents the thirteen ranks in a standard deck of cards."""
+    """Represents the thirteen ranks in a standard deck of cards, plus joker."""
     TWO = 2
     THREE = 3
     FOUR = 4
@@ -43,6 +45,7 @@ class Rank(Enum):
     QUEEN = 12
     KING = 13
     ACE = 14
+    JOKER = 15  # Special rank for jokers (wild cards)
     
     def __str__(self) -> str:
         """Return a string representation of the rank."""
@@ -60,6 +63,7 @@ class Rank(Enum):
             Rank.QUEEN: "Q",
             Rank.KING: "K",
             Rank.ACE: "A",
+            Rank.JOKER: "★",
         }
         return names[self]
 
@@ -79,11 +83,17 @@ class Card:
     
     def __str__(self) -> str:
         """Return a string representation of the card."""
+        if self.rank == Rank.JOKER:
+            return "★★"  # Special display for jokers
         return f"{self.rank}{self.suit.symbol}"
     
     def __repr__(self) -> str:
         """Return a string representation of the card for debugging."""
         return f"Card({self.rank}, {self.suit})"
+    
+    def is_joker(self) -> bool:
+        """Check if this card is a joker (wild card)."""
+        return self.rank == Rank.JOKER
     
     def __eq__(self, other: Self) -> bool:
         """Check if two cards are equal."""

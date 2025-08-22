@@ -1,7 +1,7 @@
 """
 Robot Hold 'Em - A Texas Hold 'Em poker game with robot opponents.
 """
-
+import argparse
 from typing import Dict, List, Optional
 
 from rich.console import Console
@@ -18,6 +18,7 @@ from robot_hold_em.settings import (
     BIG_BLIND,
     BROADCAST_MODE,
     NUM_HANDS,
+    JOKERS,
 )
 
 from robot_hold_em.core import (
@@ -83,6 +84,7 @@ class PokerGame:
         broadcast_mode: bool = False,
         enable_commentary: bool = True,
         commentary_frequency: float = 0.7,
+        jokers: bool = False,
     ) -> None:
         """Initialize the poker game.
 
@@ -93,6 +95,7 @@ class PokerGame:
             broadcast_mode: If True, shows all players' hole cards and detailed commentary
             enable_commentary: If True, enables commentator commentary during the game
             commentary_frequency: Probability (0-1) of generating commentary for an event
+            jokers: If True, includes jokers in the deck as wild cards
         """
         self.starting_stack = starting_stack
         self.small_blind = small_blind
@@ -102,6 +105,7 @@ class PokerGame:
         self.broadcast_mode = broadcast_mode
         self.enable_commentary = enable_commentary
         self.commentator_manager = CommentatorManager(console, commentary_frequency) if enable_commentary else None
+        self.jokers = jokers
 
     def add_player(self, player: Player) -> None:
         """Add a player to the game.
@@ -140,7 +144,7 @@ class PokerGame:
         """Set up the game state with the current players."""
         player_ids = list(self.players.keys())
         self.game_state = GameState(
-            player_ids, self.starting_stack, self.small_blind, self.big_blind
+            player_ids, self.starting_stack, self.small_blind, self.big_blind, self.jokers
         )
         
         # Emit game start event
@@ -643,8 +647,54 @@ class PokerGame:
         console.rule(style="green")
 
 
-def main() -> None:
-    """Run a demonstration of Robot Hold 'Em with robot players."""
+def main(args: Optional[List[str]] = None) -> None:
+    """Run a demonstration of Robot Hold 'Em with robot players.
+    
+    Args:
+        args: Command line arguments (for testing purposes)
+    """
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="Robot Hold 'Em - A Texas Hold 'Em poker game with AI opponents"
+    )
+    parser.add_argument(
+        '--jokers', '--wildcards',
+        action='store_true',
+        default=JOKERS,
+        help='Include jokers as wild cards in the deck (default: False)'
+    )
+    parser.add_argument(
+        '--starting-stack',
+        type=int,
+        default=STARTING_STACK,
+        help=f'Starting chip stack for each player (default: {STARTING_STACK})'
+    )
+    parser.add_argument(
+        '--small-blind',
+        type=int,
+        default=SMALL_BLIND,
+        help=f'Small blind amount (default: {SMALL_BLIND})'
+    )
+    parser.add_argument(
+        '--big-blind',
+        type=int,
+        default=BIG_BLIND,
+        help=f'Big blind amount (default: {BIG_BLIND})'
+    )
+    parser.add_argument(
+        '--hands',
+        type=int,
+        default=NUM_HANDS,
+        help=f'Number of hands to play (default: {NUM_HANDS})'
+    )
+    parser.add_argument(
+        '--no-broadcast',
+        action='store_true',
+        help='Disable broadcast mode (hide player cards)'
+    )
+    
+    parsed_args = parser.parse_args(args)
+    
     console.clear()
     console.rule(style="bright_blue", characters="=")
 
@@ -655,6 +705,8 @@ def main() -> None:
     title.append(
         "\nFEATURING LLM-POWERED PLAYERS WITH PERSONALITIES", style="bold magenta"
     )
+    if parsed_args.jokers:
+        title.append("\n🃏 WITH JOKERS/WILD CARDS 🃏", style="bold yellow")
     console.print(title, justify="center")
 
     console.rule(style="bright_blue", characters="=")
@@ -668,14 +720,15 @@ def main() -> None:
         console.print("Exiting...")
         return
 
-    # Create the game with settings from environment variables
+    # Create the game with settings from arguments and environment variables
     game = PokerGame(
-        starting_stack=STARTING_STACK,
-        small_blind=SMALL_BLIND,
-        big_blind=BIG_BLIND,
-        broadcast_mode=BROADCAST_MODE,
+        starting_stack=parsed_args.starting_stack,
+        small_blind=parsed_args.small_blind,
+        big_blind=parsed_args.big_blind,
+        broadcast_mode=BROADCAST_MODE and not parsed_args.no_broadcast,
         enable_commentary=True,
         commentary_frequency=0.7,
+        jokers=parsed_args.jokers,
     )
     
     # Add commentators with different personalities
@@ -731,7 +784,7 @@ def main() -> None:
     console.print(table)
 
     # Play hands based on NUM_HANDS setting
-    for hand_num in range(1, NUM_HANDS + 1):
+    for hand_num in range(1, parsed_args.hands + 1):
         console.print(f"\n[bold blue]HAND #{hand_num}[/bold blue]")
         game.play_hand()
 

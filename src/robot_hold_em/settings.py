@@ -19,6 +19,9 @@ SMALL_BLIND: int = int(os.environ.get("SMALL_BLIND", "5"))
 BIG_BLIND: int = int(os.environ.get("BIG_BLIND", "10"))
 BROADCAST_MODE: bool = os.environ.get("BROADCAST_MODE", "True").lower() == "true"
 
+# Jokers/wildcards setting
+JOKERS: bool = os.environ.get("JOKERS", "False").lower() == "true"
+
 # Number of hands to play in demo mode
 NUM_HANDS: int = int(os.environ.get("NUM_HANDS", "3"))
 
