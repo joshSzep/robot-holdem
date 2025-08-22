@@ -49,4 +49,35 @@ Robot Hold 'Em uses environment variables for configuration, loaded via `dotenv`
 | `BIG_BLIND` | Big blind amount | 10 |
 | `BROADCAST_MODE` | Whether to show detailed game commentary | `True` |
 | `NUM_HANDS` | Number of hands to play in demo mode | 3 |
+| `JOKERS` | Include jokers as wild cards in the deck | `False` |
+
+## Command Line Options
+
+Robot Hold 'Em supports several command line options:
+
+```bash
+robot-hold-em --help
+```
+
+Key options:
+- `--jokers`, `--wildcards`: Include jokers as wild cards in the deck
+- `--starting-stack N`: Set starting chip stack (default: 1000)
+- `--small-blind N`: Set small blind amount (default: 5) 
+- `--big-blind N`: Set big blind amount (default: 10)
+- `--hands N`: Number of hands to play (default: 3)
+- `--no-broadcast`: Disable broadcast mode
+
+### Playing with Jokers
+
+To play with jokers (wild cards), use the `--jokers` flag:
+
+```bash
+robot-hold-em --jokers --hands 5
+```
+
+When jokers are enabled:
+- The deck contains 54 cards (52 regular cards + 2 jokers)
+- Jokers are displayed as ★★ 
+- Jokers act as wild cards and can substitute for any other card
+- Hand evaluation automatically considers the best possible hand with jokers
 

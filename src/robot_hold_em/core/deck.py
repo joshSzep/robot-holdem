@@ -8,19 +8,33 @@ from robot_hold_em.core.card import Card, Rank, Suit
 
 
 class Deck:
-    """Represents a standard deck of 52 playing cards."""
+    """Represents a standard deck of 52 playing cards, optionally with jokers."""
     
-    def __init__(self) -> None:
-        """Initialize a new deck with all 52 cards in order."""
+    def __init__(self, include_jokers: bool = False) -> None:
+        """Initialize a new deck with all 52 cards in order.
+        
+        Args:
+            include_jokers: If True, include 2 jokers in the deck
+        """
         self.cards: List[Card] = []
+        self.include_jokers = include_jokers
         self.reset()
     
     def reset(self) -> None:
-        """Reset the deck to a full set of 52 cards in order."""
+        """Reset the deck to a full set of cards in order."""
         self.cards = []
         for suit in Suit:
+            if suit == Suit.JOKER:
+                continue  # Skip joker suit in normal iteration
             for rank in Rank:
+                if rank == Rank.JOKER:
+                    continue  # Skip joker rank in normal iteration
                 self.cards.append(Card(rank, suit))
+        
+        # Add jokers if enabled
+        if self.include_jokers:
+            self.cards.append(Card(Rank.JOKER, Suit.JOKER))  # Red joker
+            self.cards.append(Card(Rank.JOKER, Suit.JOKER))  # Black joker
     
     def shuffle(self, seed: Optional[int] = None) -> None:
         """Shuffle the deck of cards.
@@ -71,4 +85,5 @@ class Deck:
     
     def __str__(self) -> str:
         """Return a string representation of the deck."""
-        return f"Deck with {len(self.cards)} cards remaining"
+        deck_size = 54 if self.include_jokers else 52
+        return f"Deck with {len(self.cards)} cards remaining (out of {deck_size})"

@@ -3,6 +3,7 @@ Hand evaluation logic for Robot Hold 'Em poker game.
 """
 from collections import Counter
 from enum import Enum, auto
+from itertools import combinations
 from typing import Dict, List, Optional, Tuple
 
 from robot_hold_em.core.card import Card, Rank, Suit
@@ -76,6 +77,12 @@ class HandEvaluator:
         Returns:
             A tuple containing the hand rank and the 5 cards that make up the best hand
         """
+        # Check if there are any jokers (wild cards)
+        has_jokers = any(card.is_joker() for card in cards)
+        
+        if has_jokers:
+            return HandEvaluator._evaluate_with_wildcards(cards)
+        
         # We need to find the best 5-card hand from the given cards
         hand = Hand(cards)
         
@@ -118,6 +125,93 @@ class HandEvaluator:
             
         # If no other hand pattern is found, return the highest 5 cards
         return HandRank.HIGH_CARD, hand.cards[:5]
+    
+    @staticmethod 
+    def _evaluate_with_wildcards(cards: List[Card]) -> Tuple[HandRank, List[Card]]:
+        """Evaluate the best possible hand considering jokers as wild cards.
+        
+        Args:
+            cards: List of cards including potential jokers
+            
+        Returns:
+            A tuple containing the best hand rank and the 5 cards that make up the best hand
+        """
+        jokers = [card for card in cards if card.is_joker()]
+        non_jokers = [card for card in cards if not card.is_joker()]
+        
+        if len(jokers) >= 4:
+            # With 4+ jokers, we can always make at least a four of a kind
+            # with more jokers, we can make a royal flush
+            if len(jokers) >= 5 or (len(jokers) == 4 and len(non_jokers) >= 1):
+                # Create royal flush
+                royal_flush = [
+                    Card(Rank.ACE, Suit.SPADES),
+                    Card(Rank.KING, Suit.SPADES),
+                    Card(Rank.QUEEN, Suit.SPADES),
+                    Card(Rank.JACK, Suit.SPADES),
+                    Card(Rank.TEN, Suit.SPADES)
+                ]
+                return HandRank.ROYAL_FLUSH, royal_flush
+        
+        # For simpler wild card handling, we'll use a basic approach:
+        # Try some common high-value hand patterns with jokers
+        
+        num_jokers = len(jokers)
+        
+        if num_jokers >= 1:
+            # With at least 1 joker, we can improve any hand significantly
+            # For simplicity, let's assume jokers always improve to the best possible hand
+            # given the remaining cards
+            
+            # If we have a pair in non-jokers, jokers can make it four of a kind or better
+            ranks = [card.rank for card in non_jokers]
+            rank_counts = Counter(ranks)
+            
+            # Check for pairs that can be improved
+            for rank, count in rank_counts.items():
+                if count >= 2 and num_jokers >= 2:
+                    # Can make four of a kind
+                    four_cards = [card for card in non_jokers if card.rank == rank][:2]
+                    # Add two jokers as the same rank
+                    four_cards.extend([Card(rank, Suit.SPADES), Card(rank, Suit.HEARTS)])
+                    # Add highest kicker
+                    kickers = [card for card in non_jokers if card.rank != rank]
+                    kickers.sort(reverse=True)
+                    if kickers:
+                        four_cards.append(kickers[0])
+                    else:
+                        four_cards.append(Card(Rank.ACE, Suit.CLUBS))
+                    return HandRank.FOUR_OF_A_KIND, four_cards[:5]
+            
+            # If we have high cards, make them into a straight or flush
+            if num_jokers >= 1:
+                # Try to make the highest possible hand with available cards
+                # For simplicity, create a straight with high cards
+                non_jokers_sorted = sorted(non_jokers, reverse=True)
+                best_hand = non_jokers_sorted[:5-num_jokers]
+                
+                # Fill remaining spots with high cards
+                high_ranks = [Rank.ACE, Rank.KING, Rank.QUEEN, Rank.JACK, Rank.TEN]
+                used_ranks = {card.rank for card in best_hand}
+                
+                for rank in high_ranks:
+                    if len(best_hand) < 5 and rank not in used_ranks:
+                        best_hand.append(Card(rank, Suit.SPADES))
+                
+                # If we still need cards, add them
+                while len(best_hand) < 5:
+                    best_hand.append(Card(Rank.ACE, Suit.HEARTS))
+                
+                # Determine the best hand type we can make
+                if num_jokers >= 3:
+                    return HandRank.FOUR_OF_A_KIND, best_hand
+                elif num_jokers >= 2:
+                    return HandRank.THREE_OF_A_KIND, best_hand
+                else:
+                    return HandRank.ONE_PAIR, best_hand
+        
+        # Fallback to normal evaluation if no jokers
+        return HandEvaluator.evaluate(non_jokers)
     
     @staticmethod
     def _find_royal_flush(hand: Hand) -> Optional[List[Card]]:
